@@ -1,0 +1,98 @@
+// Prisma schema for AI-Edu MVP
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// String enums (SQLite 不支持 native enum)：
+//   Grade:         G7 | G8 | G9
+//   ErrorType:     CONCEPT | CALCULATION | MISREAD | METHOD | CARELESS | OTHER
+//   MistakeStatus: ACTIVE | MASTERED
+
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  passwordHash String
+  name         String
+  grade        String
+  createdAt    DateTime @default(now())
+
+  mistakes   Mistake[]
+  reviewLogs ReviewLog[]
+}
+
+model Subject {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  knowledgePoints KnowledgePoint[]
+  mistakes        Mistake[]
+}
+
+model KnowledgePoint {
+  id        String @id @default(cuid())
+  subjectId String
+  grade     String
+  chapter   String
+  title     String
+  summary   String
+  examples  String  // JSON serialized: [{ question, answer, explanation? }]
+  order     Int     @default(0)
+
+  subject  Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  mistakes Mistake[]
+
+  @@index([subjectId, grade, chapter])
+}
+
+model Mistake {
+  id               String  @id @default(cuid())
+  userId           String
+  subjectId        String
+  knowledgePointId String?
+  originalProblem  String
+  wrongAnswer      String
+  correctAnswer    String
+  errorType        String
+  source           String?
+  notes            String?
+  status           String  @default("ACTIVE")
+
+  // SM-2 fields
+  easeFactor     Float    @default(2.5)
+  intervalDays   Int      @default(0)
+  repetitions    Int      @default(0)
+  nextReviewAt   DateTime @default(now())
+  lastReviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject        Subject         @relation(fields: [subjectId], references: [id])
+  knowledgePoint KnowledgePoint? @relation(fields: [knowledgePointId], references: [id])
+  reviewLogs     ReviewLog[]
+
+  @@index([userId, status, nextReviewAt])
+  @@index([userId, subjectId])
+}
+
+model ReviewLog {
+  id         String   @id @default(cuid())
+  userId     String
+  mistakeId  String
+  quality    Int
+  reviewedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mistake Mistake @relation(fields: [mistakeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reviewedAt])
+  @@index([mistakeId])
+}
